@@ -1,0 +1,96 @@
+MODULE payments.transfers
+
+IMPORT payments.accounts AS accounts
+IMPORT payments.audit AS audit
+IMPORT payments.config AS config
+
+EXPORT FUNCTION transferFunds
+  INTENT: "Move a specific amount of money from one account to another atomically."
+
+  READS:
+    accounts.sender.balance
+    accounts.sender.status
+    accounts.sender.kycStatus
+    accounts.receiver.balance
+    accounts.receiver.status
+    config.maxSingleTransferAmount
+    config.systemMaintenanceMode
+
+  WRITES:
+    accounts.sender.balance
+    accounts.receiver.balance
+    accounts.transactionLedger
+
+  CALLS:
+    audit.log
+
+  RECEIVE:
+    senderId AS UserId CONSTRAIN: "must refer to an existing, active account"
+    receiverId AS UserId CONSTRAIN: "must refer to an existing account" CONSTRAIN: "must not equal senderId"
+    amount AS Price CONSTRAIN: "must be greater than zero"
+    note AS OPTIONAL Text CONSTRAIN: "length under 250 if present"
+
+  RETURN: TransferResult
+
+  ENSURE BEFORE:
+    [no_maintenance] config.systemMaintenanceMode EQUALS FALSE
+    [sender_active] accounts.sender.status EQUALS ACTIVE
+    [sender_kyc_verified] accounts.sender.kycStatus EQUALS VERIFIED
+    [receiver_active] accounts.receiver.status EQUALS ACTIVE
+    [sufficient_funds] accounts.sender.balance GREATER_OR_EQUAL amount
+    [within_limit] amount LESS_OR_EQUAL config.maxSingleTransferAmount
+    [not_self_transfer] senderId NOT_EQUALS receiverId
+
+  ENSURE AFTER:
+    accounts.sender.balance EQUALS PRIOR(accounts.sender.balance) MINUS amount
+    accounts.receiver.balance EQUALS PRIOR(accounts.receiver.balance) PLUS amount
+    accounts.sender.balance GREATER_OR_EQUAL 0
+    RETURN_VALUE IS NOT NOTHING
+
+  INVARIANT:
+    accounts.sender.balance PLUS accounts.receiver.balance EQUALS PRIOR(accounts.sender.balance) PLUS PRIOR(accounts.receiver.balance)
+
+  ON FAILURE:
+    ROLLBACK ALL WRITES
+    CALL audit.log
+      WITH event: "transfer_failed"
+      WITH senderId: senderId
+      WITH receiverId: receiverId
+      WITH amount: amount
+      WITH reason: FAILURE_REASON
+    RETURN EXPLICIT TransferFailed {
+      reason: FAILURE_REASON,
+      timestamp: NOW()
+    }
+
+  ON SUCCESS:
+    CALL audit.log
+      WITH event: "transfer_succeeded"
+      WITH senderId: senderId
+      WITH receiverId: receiverId
+      WITH amount: amount
+
+  BODY:
+    LET senderBalance = READ accounts.sender.balance
+    LET receiverBalance = READ accounts.receiver.balance
+    LET transferId = MAKE UserId FROM UUID()
+
+    WRITE accounts.sender.balance AS senderBalance MINUS amount
+    WRITE accounts.receiver.balance AS receiverBalance PLUS amount
+
+    LET ledgerEntry = {
+      id: transferId,
+      senderId: senderId,
+      receiverId: receiverId,
+      amount: amount,
+      note: note,
+      timestamp: NOW()
+    }
+
+    WRITE accounts.transactionLedger APPEND ledgerEntry
+
+    RETURN EXPLICIT TransferSuccess {
+      transactionId: transferId,
+      newSenderBalance: senderBalance MINUS amount,
+      timestamp: NOW()
+    }

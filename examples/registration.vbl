@@ -1,0 +1,72 @@
+MODULE auth.registration
+
+IMPORT auth.users AS users
+IMPORT auth.email AS emailService
+IMPORT auth.config AS config
+
+EXPORT FUNCTION registerUser
+  INTENT: "Create a new user account and send a verification email."
+
+  READS:
+    users.existingEmails
+    config.registrationEnabled
+
+  WRITES:
+    users.accounts
+    users.verificationTokens
+
+  CALLS:
+    emailService.sendVerification
+
+  RECEIVE:
+    email AS Email
+    password AS Text CONSTRAIN: "length between 8 and 128" CONSTRAIN: "must contain at least one uppercase letter" CONSTRAIN: "must contain at least one digit"
+    displayName AS Text CONSTRAIN: "length between 2 and 50" CONSTRAIN: "must not contain special characters except hyphen and underscore"
+
+  RETURN: RegistrationResult
+
+  ENSURE BEFORE:
+    [registration_open] config.registrationEnabled EQUALS TRUE
+    [email_not_taken] NOT CONTAINS users.existingEmails email
+
+  ENSURE AFTER:
+    CONTAINS users.existingEmails email
+    LENGTH OF users.accounts EQUALS LENGTH OF PRIOR(users.accounts) PLUS 1
+    RETURN_VALUE IS NOT NOTHING
+
+  ON FAILURE:
+    ROLLBACK ALL WRITES
+    RETURN EXPLICIT RegistrationFailed {
+      reason: FAILURE_REASON
+    }
+
+  BODY:
+    LET newUserId = MAKE UserId FROM UUID()
+    LET passwordHash = HASH(password)
+    LET verifyToken = HASH(CONCATENATE newUserId WITH NOW())
+
+    LET newUser = {
+      id: newUserId,
+      email: email,
+      passwordHash: passwordHash,
+      displayName: displayName,
+      status: PENDING_VERIFICATION,
+      createdAt: NOW()
+    }
+
+    WRITE users.accounts APPEND newUser
+    WRITE users.verificationTokens APPEND {
+      userId: newUserId,
+      token: verifyToken,
+      expiresAt: NOW() PLUS Duration 86400000000000
+    }
+
+    CALL emailService.sendVerification
+      WITH toEmail: email
+      WITH name: displayName
+      WITH token: verifyToken
+
+    RETURN EXPLICIT RegistrationSuccess {
+      userId: newUserId,
+      message: "Account created. Please check your email to verify your account."
+    }
