@@ -8,6 +8,9 @@ import { resolve, extname, basename, dirname, join } from 'path';
 import { compile } from './index.js';
 import { formatDiagnostics } from './errors.js';
 import { generateJS } from './codegen/js-esm.js';
+import { formatVbl, checkFormatting } from './fmt/formatter.js';
+import { tokenize } from './lexer/lexer.js';
+import { parse } from './parser/parser.js';
 
 const VERSION = '0.1.0';
 
@@ -39,17 +42,23 @@ function printUsage(): void {
 ${c.bold}COMMANDS:${c.reset}
   ${c.cyan}check${c.reset}     Analyze source files for errors and warnings
   ${c.cyan}compile${c.reset}   Compile .vbl → JavaScript ES Modules
-  ${c.cyan}fmt${c.reset}       Format source files (coming in Phase 5)
+  ${c.cyan}fmt${c.reset}       Format source files (in-place or check mode)
+  ${c.cyan}repl${c.reset}      Interactive evaluation environment
+  ${c.cyan}version${c.reset}   Print version information
 
 ${c.bold}COMPILE OPTIONS:${c.reset}
   ${c.gray}--out <dir>${c.reset}     Output directory (default: dist/)
   ${c.gray}--target${c.reset}       Compilation target (default: js-esm)
   ${c.gray}--no-verify${c.reset}    Skip runtime verification injection
-  ${c.cyan}version${c.reset}   Print version information
+
+${c.bold}FMT OPTIONS:${c.reset}
+  ${c.gray}--check${c.reset}        Check formatting without modifying files
 
 ${c.bold}EXAMPLES:${c.reset}
   vibelang check src/payments/transfers.vbl
-  vibelang check src/
+  vibelang compile examples/ --out dist
+  vibelang fmt src/ --check
+  vibelang repl
 `);
 }
 
@@ -206,6 +215,75 @@ function compileCommand(path: string, outDir: string, verification: boolean): vo
   process.exit(totalErrors > 0 ? 1 : 0);
 }
 
+function fmtCommand(path: string, checkOnly: boolean): void {
+  const files = collectVblFiles(path);
+
+  if (files.length === 0) {
+    console.log(`${c.yellow}No .vbl files found in ${path}${c.reset}`);
+    process.exit(0);
+  }
+
+  let totalFiles = 0;
+  let totalChanged = 0;
+  let totalErrors = 0;
+
+  for (const file of files) {
+    totalFiles++;
+    const source = readFileSync(file, 'utf8');
+
+    try {
+      const tokens = tokenize(source);
+      const ast = parse(tokens);
+      const formatted = formatVbl(ast);
+
+      // Normalize for comparison
+      const normalizedSource = source.replace(/[ \t]+$/gm, '').replace(/\n+$/, '\n');
+      const normalizedFormatted = formatted.replace(/[ \t]+$/gm, '').replace(/\n+$/, '\n');
+
+      if (normalizedSource !== normalizedFormatted) {
+        totalChanged++;
+        if (checkOnly) {
+          console.log(`  ${c.yellow}✗${c.reset} ${c.cyan}${basename(file)}${c.reset} ${c.gray}— needs formatting${c.reset}`);
+        } else {
+          writeFileSync(file, formatted, 'utf8');
+          console.log(`  ${c.green}✓${c.reset} ${c.cyan}${basename(file)}${c.reset} ${c.gray}— formatted${c.reset}`);
+        }
+      } else {
+        console.log(`  ${c.green}✓${c.reset} ${c.cyan}${basename(file)}${c.reset} ${c.gray}— already formatted${c.reset}`);
+      }
+    } catch (err: any) {
+      totalErrors++;
+      console.error(`  ${c.red}✗${c.reset} ${c.cyan}${basename(file)}${c.reset} — ${c.red}${err.message}${c.reset}`);
+    }
+  }
+
+  console.log();
+  console.log(`${c.gray}───────────────────────────────────────${c.reset}`);
+  console.log(`  ${c.bold}Files checked:${c.reset}  ${totalFiles}`);
+
+  if (checkOnly) {
+    if (totalChanged > 0) {
+      console.log(`  ${c.yellow}${c.bold}Unformatted:${c.reset}    ${totalChanged}`);
+      console.log(`\n  ${c.yellow}Run \`vibelang fmt ${path}\` to format.${c.reset}`);
+      process.exit(1);
+    } else {
+      console.log(`\n  ${c.green}${c.bold}✓ All files properly formatted!${c.reset}`);
+    }
+  } else {
+    if (totalChanged > 0) {
+      console.log(`  ${c.bold}Formatted:${c.reset}      ${totalChanged}`);
+    }
+    console.log(`\n  ${c.green}${c.bold}✓ Formatting complete!${c.reset}`);
+  }
+
+  if (totalErrors > 0) {
+    console.log(`  ${c.red}${c.bold}Errors:${c.reset}         ${totalErrors}`);
+  }
+
+  console.log();
+  process.exit((checkOnly && totalChanged > 0) || totalErrors > 0 ? 1 : 0);
+}
+
 // ==========================================================================
 // Main
 // ==========================================================================
@@ -242,11 +320,24 @@ switch (command) {
     break;
   }
 
-  case 'fmt':
+  case 'fmt': {
+    const fmtPath = args[1];
+    if (!fmtPath) {
+      console.error(`${c.red}Error:${c.reset} Missing path argument`);
+      console.log(`Usage: vibelang fmt <path> [--check]`);
+      process.exit(1);
+    }
+    const checkOnly = args.includes('--check');
     printBanner();
-    console.log(`${c.yellow}Formatter not yet implemented (Phase 5)${c.reset}`);
-    process.exit(0);
+    fmtCommand(fmtPath, checkOnly);
     break;
+  }
+
+  case 'repl': {
+    // Dynamic import to avoid loading readline at startup
+    import('./repl/repl.js').then(m => m.startRepl());
+    break;
+  }
 
   case 'version':
   case '--version':

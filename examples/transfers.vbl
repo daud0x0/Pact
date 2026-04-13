@@ -33,7 +33,7 @@ EXPORT FUNCTION transferFunds
   RETURN: TransferResult
 
   ENSURE BEFORE:
-    [no_maintenance] config.systemMaintenanceMode EQUALS FALSE
+    [no_maintenance] config.systemMaintenanceMode EQUALS false
     [sender_active] accounts.sender.status EQUALS ACTIVE
     [sender_kyc_verified] accounts.sender.kycStatus EQUALS VERIFIED
     [receiver_active] accounts.receiver.status EQUALS ACTIVE
@@ -58,7 +58,8 @@ EXPORT FUNCTION transferFunds
       WITH receiverId: receiverId
       WITH amount: amount
       WITH reason: FAILURE_REASON
-    RETURN EXPLICIT TransferFailed {
+    RETURN EXPLICIT {
+      __type: "TransferFailed",
       reason: FAILURE_REASON,
       timestamp: NOW()
     }
@@ -74,10 +75,8 @@ EXPORT FUNCTION transferFunds
     LET senderBalance = READ accounts.sender.balance
     LET receiverBalance = READ accounts.receiver.balance
     LET transferId = MAKE UserId FROM UUID()
-
     WRITE accounts.sender.balance AS senderBalance MINUS amount
     WRITE accounts.receiver.balance AS receiverBalance PLUS amount
-
     LET ledgerEntry = {
       id: transferId,
       senderId: senderId,
@@ -86,10 +85,9 @@ EXPORT FUNCTION transferFunds
       note: note,
       timestamp: NOW()
     }
-
     WRITE accounts.transactionLedger APPEND ledgerEntry
-
-    RETURN EXPLICIT TransferSuccess {
+    RETURN EXPLICIT {
+      __type: "TransferSuccess",
       transactionId: transferId,
       newSenderBalance: senderBalance MINUS amount,
       timestamp: NOW()

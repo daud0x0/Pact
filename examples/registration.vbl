@@ -26,25 +26,25 @@ EXPORT FUNCTION registerUser
   RETURN: RegistrationResult
 
   ENSURE BEFORE:
-    [registration_open] config.registrationEnabled EQUALS TRUE
-    [email_not_taken] NOT CONTAINS users.existingEmails email
+    [registration_open] config.registrationEnabled EQUALS true
+    [email_not_taken] NOT users.existingEmails CONTAINS email
 
   ENSURE AFTER:
-    CONTAINS users.existingEmails email
+    users.existingEmails CONTAINS email
     LENGTH OF users.accounts EQUALS LENGTH OF PRIOR(users.accounts) PLUS 1
     RETURN_VALUE IS NOT NOTHING
 
   ON FAILURE:
     ROLLBACK ALL WRITES
-    RETURN EXPLICIT RegistrationFailed {
+    RETURN EXPLICIT {
+      __type: "RegistrationFailed",
       reason: FAILURE_REASON
     }
 
   BODY:
     LET newUserId = MAKE UserId FROM UUID()
-    LET passwordHash = HASH(password)
-    LET verifyToken = HASH(CONCATENATE newUserId WITH NOW())
-
+    LET passwordHash = HASH(0: password)
+    LET verifyToken = HASH(0: newUserId CONCATENATE NOW())
     LET newUser = {
       id: newUserId,
       email: email,
@@ -53,20 +53,18 @@ EXPORT FUNCTION registerUser
       status: PENDING_VERIFICATION,
       createdAt: NOW()
     }
-
     WRITE users.accounts APPEND newUser
     WRITE users.verificationTokens APPEND {
       userId: newUserId,
       token: verifyToken,
-      expiresAt: NOW() PLUS Duration 86400000000000
+      expiresAt: NOW() PLUS MAKE Duration FROM 86400000000000
     }
-
     CALL emailService.sendVerification
       WITH toEmail: email
       WITH name: displayName
       WITH token: verifyToken
-
-    RETURN EXPLICIT RegistrationSuccess {
+    RETURN EXPLICIT {
+      __type: "RegistrationSuccess",
       userId: newUserId,
       message: "Account created. Please check your email to verify your account."
     }
