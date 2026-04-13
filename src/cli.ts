@@ -3,10 +3,11 @@
 // VibeL CLI — vibelang command
 // ============================================================================
 
-import { readFileSync, readdirSync, statSync } from 'fs';
-import { resolve, extname } from 'path';
+import { readFileSync, readdirSync, statSync, writeFileSync, mkdirSync } from 'fs';
+import { resolve, extname, basename, dirname, join } from 'path';
 import { compile } from './index.js';
 import { formatDiagnostics } from './errors.js';
+import { generateJS } from './codegen/js-esm.js';
 
 const VERSION = '0.1.0';
 
@@ -37,8 +38,13 @@ function printUsage(): void {
 
 ${c.bold}COMMANDS:${c.reset}
   ${c.cyan}check${c.reset}     Analyze source files for errors and warnings
-  ${c.cyan}compile${c.reset}   Compile source files (coming in Phase 3)
+  ${c.cyan}compile${c.reset}   Compile .vbl → JavaScript ES Modules
   ${c.cyan}fmt${c.reset}       Format source files (coming in Phase 5)
+
+${c.bold}COMPILE OPTIONS:${c.reset}
+  ${c.gray}--out <dir>${c.reset}     Output directory (default: dist/)
+  ${c.gray}--target${c.reset}       Compilation target (default: js-esm)
+  ${c.gray}--no-verify${c.reset}    Skip runtime verification injection
   ${c.cyan}version${c.reset}   Print version information
 
 ${c.bold}EXAMPLES:${c.reset}
@@ -134,6 +140,72 @@ function checkCommand(path: string): void {
   process.exit(totalErrors > 0 ? 1 : 0);
 }
 
+function compileCommand(path: string, outDir: string, verification: boolean): void {
+  const files = collectVblFiles(path);
+
+  if (files.length === 0) {
+    console.log(`${c.yellow}No .vbl files found in ${path}${c.reset}`);
+    process.exit(0);
+  }
+
+  let totalErrors = 0;
+  let totalFiles = 0;
+  let totalGenerated = 0;
+
+  // Ensure output directory exists
+  mkdirSync(outDir, { recursive: true });
+
+  for (const file of files) {
+    totalFiles++;
+    const source = readFileSync(file, 'utf8');
+
+    try {
+      const result = compile(source);
+
+      if (result.errors.length > 0) {
+        totalErrors += result.errors.length;
+        for (const d of result.diagnostics) {
+          d.source = file;
+        }
+        console.log(formatDiagnostics(result.diagnostics, source));
+        continue;
+      }
+
+      // Generate JS
+      const js = generateJS(result.ast, { verification });
+
+      // Output filename: same name, .js extension
+      const outFile = join(outDir, basename(file, '.vbl') + '.js');
+      writeFileSync(outFile, js, 'utf8');
+      totalGenerated++;
+
+      console.log(`  ${c.green}✓${c.reset} ${c.cyan}${basename(file)}${c.reset} → ${c.gray}${outFile}${c.reset}`);
+
+    } catch (err: any) {
+      totalErrors++;
+      console.error(`${c.red}${c.bold}error${c.reset}: ${err.message}`);
+      console.error(`  ${c.gray}-->${c.reset} ${c.cyan}${file}${c.reset}`);
+    }
+  }
+
+  // Summary
+  console.log();
+  console.log(`${c.gray}───────────────────────────────────────${c.reset}`);
+  console.log(`  ${c.bold}Files processed:${c.reset}  ${totalFiles}`);
+  console.log(`  ${c.bold}Generated:${c.reset}        ${totalGenerated}`);
+  console.log(`  ${c.bold}Output:${c.reset}           ${outDir}`);
+  console.log(`  ${c.bold}Verification:${c.reset}     ${verification ? `${c.green}enabled${c.reset}` : `${c.yellow}disabled${c.reset}`}`);
+
+  if (totalErrors > 0) {
+    console.log(`  ${c.red}${c.bold}Errors:${c.reset}           ${totalErrors}`);
+  } else {
+    console.log(`\n  ${c.green}${c.bold}✓ Compilation complete!${c.reset}`);
+  }
+
+  console.log();
+  process.exit(totalErrors > 0 ? 1 : 0);
+}
+
 // ==========================================================================
 // Main
 // ==========================================================================
@@ -154,11 +226,21 @@ switch (command) {
     break;
   }
 
-  case 'compile':
+  case 'compile': {
+    const compilePath = args[1];
+    if (!compilePath) {
+      console.error(`${c.red}Error:${c.reset} Missing path argument`);
+      console.log(`Usage: vibelang compile <path> [--out <dir>] [--no-verify]`);
+      process.exit(1);
+    }
+    // Parse compile flags
+    const outIdx = args.indexOf('--out');
+    const outDir = outIdx !== -1 && args[outIdx + 1] ? resolve(args[outIdx + 1]) : resolve('dist');
+    const noVerify = args.includes('--no-verify');
     printBanner();
-    console.log(`${c.yellow}Compilation not yet implemented (Phase 3)${c.reset}`);
-    process.exit(0);
+    compileCommand(compilePath, outDir, !noVerify);
     break;
+  }
 
   case 'fmt':
     printBanner();

@@ -11,6 +11,8 @@ export { compileSpec, specToString } from './spec/compiler.js';
 export type { CompiledFunctionSpec, CompiledPredicate, RuntimeContext, PredicateResult } from './spec/compiler.js';
 export { executeWithVerification, formatVerificationResult } from './spec/runtime.js';
 export type { VerificationResult, ExecutionContext } from './spec/runtime.js';
+export { generateJS } from './codegen/js-esm.js';
+export type { CodegenOptions } from './codegen/js-esm.js';
 export { formatDiagnostics, CompilerError, ErrorCodes } from './errors.js';
 export type { Diagnostic } from './errors.js';
 export * from './ast/nodes.js';
