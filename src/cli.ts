@@ -341,11 +341,19 @@ switch (command) {
     break;
   }
 
-  case 'test':
+  case 'test': {
+    const testPath = args[1];
+    if (!testPath) {
+      console.error(`${c.red}Error:${c.reset} Missing path argument`);
+      console.log(`Usage: vibelang test <path> [--generated] [--fuzz]`);
+      process.exit(1);
+    }
+    const runGenerated = args.includes('--generated');
+    const fuzzMode = args.includes('--fuzz');
     printBanner();
-    console.log(`${c.yellow}The property-based test generator (Phase 6) is slated for an upcoming release.\nStay tuned!${c.reset}`);
-    process.exit(0);
+    import('./testgen/runner.js').then(m => m.runTests(testPath, runGenerated, fuzzMode));
     break;
+  }
 
   case 'prove':
     printBanner();

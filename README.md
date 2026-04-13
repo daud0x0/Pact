@@ -120,7 +120,7 @@ vibelang repl                          # Interactive CLI environment
 | 3 | Interpreter / JS Code Generation | ✅ Complete |
 | 4 | PRIOR() State & Rollbacks | ✅ Complete |
 | 5 | REPL & Formatter (`fmt`) | ✅ Complete |
-| 6 | Static Analysis & Proof System | 🔜 Deferred |
+| 6 | Property-Based Test Generation & Fuzzing | ✅ Complete |
 
 ## License
 
