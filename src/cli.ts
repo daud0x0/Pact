@@ -44,6 +44,8 @@ ${c.bold}COMMANDS:${c.reset}
   ${c.cyan}compile${c.reset}   Compile .vbl → JavaScript ES Modules
   ${c.cyan}fmt${c.reset}       Format source files (in-place or check mode)
   ${c.cyan}repl${c.reset}      Interactive evaluation environment
+  ${c.cyan}test${c.reset}      Run property-based and fuzzer tests
+  ${c.cyan}prove${c.reset}     Formally verify postconditions and invariants
   ${c.cyan}version${c.reset}   Print version information
 
 ${c.bold}COMPILE OPTIONS:${c.reset}
@@ -338,6 +340,18 @@ switch (command) {
     import('./repl/repl.js').then(m => m.startRepl());
     break;
   }
+
+  case 'test':
+    printBanner();
+    console.log(`${c.yellow}The property-based test generator (Phase 6) is slated for an upcoming release.\nStay tuned!${c.reset}`);
+    process.exit(0);
+    break;
+
+  case 'prove':
+    printBanner();
+    console.log(`${c.yellow}The Formal Proof System (Phase 6) requires external SMT bindings (e.g. Z3).\nThis research is ongoing and deferred to future releases.${c.reset}`);
+    process.exit(0);
+    break;
 
   case 'version':
   case '--version':
