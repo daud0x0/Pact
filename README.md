@@ -81,8 +81,11 @@ Pact/
 │   ├── parser/         # Recursive descent parser (LL(1))
 │   ├── ast/            # AST node type definitions
 │   ├── analyzer/       # Semantic analysis & validation
+│   ├── spec/           # Spec compiler & runtime verification
+│   ├── codegen/        # JS-ESM code generator
+│   ├── repl/           # Interactive REPL environment
+│   ├── fmt/            # Canonical auto-formatter
 │   ├── cli.ts          # CLI entry point
-│   ├── errors.ts       # Error types & formatting
 │   └── index.ts        # Public API
 ├── examples/
 │   ├── transfers.vbl   # Fund transfer example
@@ -93,22 +96,31 @@ Pact/
 ## Compiler Pipeline
 
 ```
-Source (.vbl) → Lexer → Token Stream → Parser → AST → Semantic Analyzer → Diagnostics
+Source (.vbl) → Lexer → Token Stream → Parser → AST → Semantic Analyzer → Spec Compiler → Code Generator → JS-ESM
+                                                                  ↓
+                                                   Runtime Verification Injection
+```
+
+## Toolchain Reference
+
+```bash
+vibelang check src/                    # Parse and semantically validate
+vibelang compile src/ --out dist       # Compile to JS with runtime checks
+vibelang compile src/ --no-verify      # Compile to bare JS (no checks)
+vibelang fmt src/                      # Format code canonically
+vibelang repl                          # Interactive CLI environment
 ```
 
 ## Current Status
 
 | Phase | Component | Status |
 |-------|-----------|--------|
-| 1 | Lexer | ✅ Complete |
-| 1 | Parser | ✅ Complete |
-| 1 | AST | ✅ Complete |
-| 1 | Semantic Analyzer | ✅ Complete |
-| 1 | CLI (`vibelang check`) | ✅ Complete |
-| 2 | Spec Compiler | 🔜 Planned |
-| 3 | Code Generation | 🔜 Planned |
-| 4 | Runtime Verification | 🔜 Planned |
-| 5 | REPL & Formatter | 🔜 Planned |
+| 1 | Lexer, Parser, AST, Analyzer | ✅ Complete |
+| 2 | Spec Compiler & Runtime Verification | ✅ Complete |
+| 3 | Interpreter / JS Code Generation | ✅ Complete |
+| 4 | PRIOR() State & Rollbacks | ✅ Complete |
+| 5 | REPL & Formatter (`fmt`) | ✅ Complete |
+| 6 | Static Analysis & Proof System | 🔜 Deferred |
 
 ## License
 
