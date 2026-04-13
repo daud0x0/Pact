@@ -372,10 +372,6 @@ class VblFormatter {
       case 'ReadExpr':
         return `READ ${expr.field.join('.')}`;
       case 'RecordLiteralExpr': {
-        if (expr.typeName) {
-          const fields = expr.fields.map(f => `${f.name}: ${this.formatExpr(f.value)}`).join(',\n' + '  '.repeat(this.indent + 1));
-          return `${expr.typeName} {\n${'  '.repeat(this.indent + 1)}${fields}\n${'  '.repeat(this.indent)}}`;
-        }
         const fields = expr.fields.map(f => `${f.name}: ${this.formatExpr(f.value)}`).join(',\n' + '  '.repeat(this.indent + 1));
         return `{\n${'  '.repeat(this.indent + 1)}${fields}\n${'  '.repeat(this.indent)}}`;
       }
